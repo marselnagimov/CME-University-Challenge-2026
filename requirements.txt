@@ -1,0 +1,4 @@
+yfinance
+pandas
+pyyaml
+plotly>=5.19

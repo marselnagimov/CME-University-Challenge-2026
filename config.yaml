@@ -1,0 +1,16 @@
+# Markets to follow. "yahoo" is the free data symbol (front-month continuous).
+# "point_value" is dollars per 1.00 move in the quoted price (used later for sizing).
+history: 2y
+
+markets:
+  ES: {name: S&P 500,      yahoo: "ES=F", point_value: 50}
+  NQ: {name: Nasdaq 100,   yahoo: "NQ=F", point_value: 20}
+  ZN: {name: 10-Year Note, yahoo: "ZN=F", point_value: 1000}
+  CL: {name: Crude Oil,    yahoo: "CL=F", point_value: 1000}
+  NG: {name: Natural Gas,  yahoo: "NG=F", point_value: 10000}
+  GC: {name: Gold,         yahoo: "GC=F", point_value: 100}
+  HG: {name: Copper,       yahoo: "HG=F", point_value: 25000}
+  6E: {name: Euro FX,      yahoo: "6E=F", point_value: 125000}
+  6J: {name: Japanese Yen, yahoo: "6J=F", point_value: 12500000}
+  ZC: {name: Corn,         yahoo: "ZC=F", point_value: 50}
+  ZS: {name: Soybeans,     yahoo: "ZS=F", point_value: 50}
