@@ -1,47 +1,50 @@
 # The market table. This is reference data, not tuning: parameters live at the top of run.py.
 #   yahoo:       front-month continuous price symbol
 #   point_value: dollars per 1.00 move in the quoted price (VERIFY against CME contract specs)
+#   margin_pct:  ROUGH GUESS of margin as % of contract value. Replace with `margin: <dollars>` from CQG
+#   group:       equity, bond, fx or commodity (decides which signals apply)
+#   cot:         CFTC contract code for the weekly positioning report (from memory: run.py prints any that return nothing)
 #   proxy:       ETF whose options stand in for options on the future (omit if none)
 #   exchange:    Yahoo suffix for individual contract months (e.g. CLZ26.NYM)
 #   months:      contract months listed (F=Jan G=Feb H=Mar J=Apr K=May M=Jun N=Jul Q=Aug U=Sep V=Oct X=Nov Z=Dec)
 markets:
   # Equity indices
-  ES:  {name: S&P 500,           yahoo: "ES=F",  point_value: 50,       proxy: SPY,  exchange: CME, months: HMUZ}
-  NQ:  {name: Nasdaq 100,        yahoo: "NQ=F",  point_value: 20,       proxy: QQQ,  exchange: CME, months: HMUZ}
-  RTY: {name: Russell 2000,      yahoo: "RTY=F", point_value: 50,       proxy: IWM,  exchange: CME, months: HMUZ}
-  YM:  {name: Dow Jones,         yahoo: "YM=F",  point_value: 5,        proxy: DIA,  exchange: CBT, months: HMUZ}
+  ES:  {name: S&P 500,           yahoo: "ES=F",  point_value: 50,       proxy: SPY,  margin_pct: 6, group: equity, cot: "13874A", exchange: CME, months: HMUZ}
+  NQ:  {name: Nasdaq 100,        yahoo: "NQ=F",  point_value: 20,       proxy: QQQ,  margin_pct: 7, group: equity, cot: "209742", exchange: CME, months: HMUZ}
+  RTY: {name: Russell 2000,      yahoo: "RTY=F", point_value: 50,       proxy: IWM,  margin_pct: 7, group: equity, cot: "239742", exchange: CME, months: HMUZ}
+  YM:  {name: Dow Jones,         yahoo: "YM=F",  point_value: 5,        proxy: DIA,  margin_pct: 5, group: equity, cot: "124603", exchange: CBT, months: HMUZ}
   # Interest rates
-  ZT:  {name: 2-Year Note,       yahoo: "ZT=F",  point_value: 2000,     proxy: SHY,  exchange: CBT, months: HMUZ}
-  ZF:  {name: 5-Year Note,       yahoo: "ZF=F",  point_value: 1000,     proxy: IEI,  exchange: CBT, months: HMUZ}
-  ZN:  {name: 10-Year Note,      yahoo: "ZN=F",  point_value: 1000,     proxy: IEF,  exchange: CBT, months: HMUZ}
-  ZB:  {name: 30-Year Bond,      yahoo: "ZB=F",  point_value: 1000,     proxy: TLT,  exchange: CBT, months: HMUZ}
-  UB:  {name: Ultra Bond,        yahoo: "UB=F",  point_value: 1000,     proxy: TLT,  exchange: CBT, months: HMUZ}
+  ZT:  {name: 2-Year Note,       yahoo: "ZT=F",  point_value: 2000,     proxy: SHY,  margin_pct: 0.7, group: bond, cot: "042601", exchange: CBT, months: HMUZ}
+  ZF:  {name: 5-Year Note,       yahoo: "ZF=F",  point_value: 1000,     proxy: IEI,  margin_pct: 1.3, group: bond, cot: "044601", exchange: CBT, months: HMUZ}
+  ZN:  {name: 10-Year Note,      yahoo: "ZN=F",  point_value: 1000,     proxy: IEF,  margin_pct: 2, group: bond, cot: "043602", exchange: CBT, months: HMUZ}
+  ZB:  {name: 30-Year Bond,      yahoo: "ZB=F",  point_value: 1000,     proxy: TLT,  margin_pct: 4, group: bond, cot: "020601", exchange: CBT, months: HMUZ}
+  UB:  {name: Ultra Bond,        yahoo: "UB=F",  point_value: 1000,     proxy: TLT,  margin_pct: 5, group: bond, cot: "020604", exchange: CBT, months: HMUZ}
   # Energy
-  CL:  {name: Crude Oil,         yahoo: "CL=F",  point_value: 1000,     proxy: USO,  exchange: NYM, months: FGHJKMNQUVXZ}
-  NG:  {name: Natural Gas,       yahoo: "NG=F",  point_value: 10000,    proxy: UNG,  exchange: NYM, months: FGHJKMNQUVXZ}
-  RB:  {name: Gasoline,          yahoo: "RB=F",  point_value: 42000,    proxy: UGA,  exchange: NYM, months: FGHJKMNQUVXZ}
-  HO:  {name: Heating Oil,       yahoo: "HO=F",  point_value: 42000,                 exchange: NYM, months: FGHJKMNQUVXZ}
+  CL:  {name: Crude Oil,         yahoo: "CL=F",  point_value: 1000,     proxy: USO,  margin_pct: 9, group: commodity, cot: "067651", exchange: NYM, months: FGHJKMNQUVXZ}
+  NG:  {name: Natural Gas,       yahoo: "NG=F",  point_value: 10000,    proxy: UNG,  margin_pct: 15, group: commodity, cot: "023651", exchange: NYM, months: FGHJKMNQUVXZ}
+  RB:  {name: Gasoline,          yahoo: "RB=F",  point_value: 42000,    proxy: UGA,  margin_pct: 9, group: commodity, cot: "111659", exchange: NYM, months: FGHJKMNQUVXZ}
+  HO:  {name: Heating Oil,       yahoo: "HO=F",  point_value: 42000,                 margin_pct: 9, group: commodity, cot: "022651", exchange: NYM, months: FGHJKMNQUVXZ}
   # Metals
-  GC:  {name: Gold,              yahoo: "GC=F",  point_value: 100,      proxy: GLD,  exchange: CMX, months: GJMQVZ}
-  SI:  {name: Silver,            yahoo: "SI=F",  point_value: 5000,     proxy: SLV,  exchange: CMX, months: HKNUZ}
-  HG:  {name: Copper,            yahoo: "HG=F",  point_value: 25000,    proxy: CPER, exchange: CMX, months: HKNUZ}
-  PL:  {name: Platinum,          yahoo: "PL=F",  point_value: 50,       proxy: PPLT, exchange: NYM, months: FJNV}
-  PA:  {name: Palladium,         yahoo: "PA=F",  point_value: 100,      proxy: PALL, exchange: NYM, months: HMUZ}
+  GC:  {name: Gold,              yahoo: "GC=F",  point_value: 100,      proxy: GLD,  margin_pct: 6, group: commodity, cot: "088691", exchange: CMX, months: GJMQVZ}
+  SI:  {name: Silver,            yahoo: "SI=F",  point_value: 5000,     proxy: SLV,  margin_pct: 10, group: commodity, cot: "084691", exchange: CMX, months: HKNUZ}
+  HG:  {name: Copper,            yahoo: "HG=F",  point_value: 25000,    proxy: CPER, margin_pct: 7, group: commodity, cot: "085692", exchange: CMX, months: HKNUZ}
+  PL:  {name: Platinum,          yahoo: "PL=F",  point_value: 50,       proxy: PPLT, margin_pct: 8, group: commodity, cot: "076651", exchange: NYM, months: FJNV}
+  PA:  {name: Palladium,         yahoo: "PA=F",  point_value: 100,      proxy: PALL, margin_pct: 12, group: commodity, cot: "075651", exchange: NYM, months: HMUZ}
   # Currencies
-  6E:  {name: Euro,              yahoo: "6E=F",  point_value: 125000,   proxy: FXE,  exchange: CME, months: HMUZ}
-  6J:  {name: Japanese Yen,      yahoo: "6J=F",  point_value: 12500000, proxy: FXY,  exchange: CME, months: HMUZ}
-  6B:  {name: British Pound,     yahoo: "6B=F",  point_value: 62500,    proxy: FXB,  exchange: CME, months: HMUZ}
-  6C:  {name: Canadian Dollar,   yahoo: "6C=F",  point_value: 100000,   proxy: FXC,  exchange: CME, months: HMUZ}
-  6A:  {name: Australian Dollar, yahoo: "6A=F",  point_value: 100000,   proxy: FXA,  exchange: CME, months: HMUZ}
-  6S:  {name: Swiss Franc,       yahoo: "6S=F",  point_value: 125000,   proxy: FXF,  exchange: CME, months: HMUZ}
-  6M:  {name: Mexican Peso,      yahoo: "6M=F",  point_value: 500000,                exchange: CME, months: HMUZ}
+  6E:  {name: Euro,              yahoo: "6E=F",  point_value: 125000,   proxy: FXE,  margin_pct: 2, group: fx, cot: "099741", exchange: CME, months: HMUZ}
+  6J:  {name: Japanese Yen,      yahoo: "6J=F",  point_value: 12500000, proxy: FXY,  margin_pct: 3, group: fx, cot: "097741", exchange: CME, months: HMUZ}
+  6B:  {name: British Pound,     yahoo: "6B=F",  point_value: 62500,    proxy: FXB,  margin_pct: 2, group: fx, cot: "096742", exchange: CME, months: HMUZ}
+  6C:  {name: Canadian Dollar,   yahoo: "6C=F",  point_value: 100000,   proxy: FXC,  margin_pct: 2, group: fx, cot: "090741", exchange: CME, months: HMUZ}
+  6A:  {name: Australian Dollar, yahoo: "6A=F",  point_value: 100000,   proxy: FXA,  margin_pct: 2.5, group: fx, cot: "232741", exchange: CME, months: HMUZ}
+  6S:  {name: Swiss Franc,       yahoo: "6S=F",  point_value: 125000,   proxy: FXF,  margin_pct: 3, group: fx, cot: "092741", exchange: CME, months: HMUZ}
+  6M:  {name: Mexican Peso,      yahoo: "6M=F",  point_value: 500000,                margin_pct: 5, group: fx, cot: "095741", exchange: CME, months: HMUZ}
   # Agriculture (grains in cents per bushel, livestock and soybean oil in cents per pound)
-  ZC:  {name: Corn,              yahoo: "ZC=F",  point_value: 50,       proxy: CORN, exchange: CBT, months: HKNUZ}
-  ZS:  {name: Soybeans,          yahoo: "ZS=F",  point_value: 50,       proxy: SOYB, exchange: CBT, months: FHKNQUX}
-  ZW:  {name: Wheat,             yahoo: "ZW=F",  point_value: 50,       proxy: WEAT, exchange: CBT, months: HKNUZ}
-  KE:  {name: KC Wheat,          yahoo: "KE=F",  point_value: 50,                    exchange: CBT, months: HKNUZ}
-  ZL:  {name: Soybean Oil,       yahoo: "ZL=F",  point_value: 600,                   exchange: CBT, months: FHKNQUVZ}
-  ZM:  {name: Soybean Meal,      yahoo: "ZM=F",  point_value: 100,                   exchange: CBT, months: FHKNQUVZ}
-  LE:  {name: Live Cattle,       yahoo: "LE=F",  point_value: 400,                   exchange: CME, months: GJMQVZ}
-  HE:  {name: Lean Hogs,         yahoo: "HE=F",  point_value: 400,                   exchange: CME, months: GJKMNQVZ}
-  GF:  {name: Feeder Cattle,     yahoo: "GF=F",  point_value: 500,                   exchange: CME, months: FHJKQUVX}
+  ZC:  {name: Corn,              yahoo: "ZC=F",  point_value: 50,       proxy: CORN, margin_pct: 5, group: commodity, cot: "002602", exchange: CBT, months: HKNUZ}
+  ZS:  {name: Soybeans,          yahoo: "ZS=F",  point_value: 50,       proxy: SOYB, margin_pct: 5, group: commodity, cot: "005602", exchange: CBT, months: FHKNQUX}
+  ZW:  {name: Wheat,             yahoo: "ZW=F",  point_value: 50,       proxy: WEAT, margin_pct: 7, group: commodity, cot: "001602", exchange: CBT, months: HKNUZ}
+  KE:  {name: KC Wheat,          yahoo: "KE=F",  point_value: 50,                    margin_pct: 7, group: commodity, cot: "001612", exchange: CBT, months: HKNUZ}
+  ZL:  {name: Soybean Oil,       yahoo: "ZL=F",  point_value: 600,                   margin_pct: 6, group: commodity, cot: "007601", exchange: CBT, months: FHKNQUVZ}
+  ZM:  {name: Soybean Meal,      yahoo: "ZM=F",  point_value: 100,                   margin_pct: 6, group: commodity, cot: "026603", exchange: CBT, months: FHKNQUVZ}
+  LE:  {name: Live Cattle,       yahoo: "LE=F",  point_value: 400,                   margin_pct: 4, group: commodity, cot: "057642", exchange: CME, months: GJMQVZ}
+  HE:  {name: Lean Hogs,         yahoo: "HE=F",  point_value: 400,                   margin_pct: 6, group: commodity, cot: "054642", exchange: CME, months: GJKMNQVZ}
+  GF:  {name: Feeder Cattle,     yahoo: "GF=F",  point_value: 500,                   margin_pct: 4, group: commodity, cot: "061641", exchange: CME, months: FHJKQUVX}

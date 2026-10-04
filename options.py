@@ -83,6 +83,8 @@ def read(chain, spot, P):
     atm = np.interp(F, o["strike"], o["iv"])
     d = P["SKEW_DELTA"]
     skew = iv_at_delta(o[~o["call"]], -d) - iv_at_delta(o[o["call"]], d)
+    if abs(skew) * 100 > P.get("MAX_ABS_SKEW", 10):
+        skew = np.nan          # a skew this large comes from stale or one-sided quotes, not the market
 
     near = o[(o["strike"] / F - 1).abs() <= P["GAMMA_RANGE_PCT"] / 100].copy()
     near["gex"] = near["gamma"] * near["oi"]

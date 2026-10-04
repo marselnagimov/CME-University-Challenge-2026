@@ -81,6 +81,42 @@ def contracts(code, m, P, front_close=None):
     return live[:P["CURVE_CONTRACTS"]]
 
 
+COT_URL = "https://publicreporting.cftc.gov/resource/6dca-aqww.json"   # legacy report, futures only
+
+
+def cot(markets, P):
+    """Weekly CFTC positioning for every market with a `cot` code. Empty DataFrame on failure."""
+    import requests
+    path = DATA / "cot.csv"
+    if _fresh(path, P["CACHE_HOURS"]):
+        return pd.read_csv(path, dtype={"code": str}, parse_dates=["date"])
+    codes = {m["cot"]: c for c, m in markets.items() if m.get("cot")}
+    start = (pd.Timestamp.today() - pd.Timedelta(weeks=P["COT_WEEKS"])).strftime("%Y-%m-%d")
+    params = {
+        "$select": "cftc_contract_market_code,report_date_as_yyyy_mm_dd,open_interest_all,"
+                   "noncomm_positions_long_all,noncomm_positions_short_all",
+        "$where": f"report_date_as_yyyy_mm_dd > '{start}' AND cftc_contract_market_code in ("
+                  + ",".join(f"'{c}'" for c in codes) + ")",
+        "$limit": 50000,
+    }
+    try:
+        rows = requests.get(COT_URL, params=params, timeout=30).json()
+        df = pd.DataFrame(rows)
+        df = pd.DataFrame({
+            "code": df["cftc_contract_market_code"], "market": df["cftc_contract_market_code"].map(codes),
+            "date": pd.to_datetime(df["report_date_as_yyyy_mm_dd"]),
+            "oi": df["open_interest_all"].astype(float),
+            "spec_long": df["noncomm_positions_long_all"].astype(float),
+            "spec_short": df["noncomm_positions_short_all"].astype(float),
+        }).sort_values(["market", "date"])
+    except Exception as e:
+        print(f"  CFTC positioning download failed ({type(e).__name__}); positioning signals will abstain")
+        return pd.DataFrame(columns=["code", "market", "date", "oi", "spec_long", "spec_short"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path, index=False)
+    return df
+
+
 def option_chain(proxy, P):
     """One expiry of the proxy ETF's option chain: strike, prices, open interest."""
     path = DATA / "options" / f"{proxy}.csv"

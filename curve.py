@@ -6,6 +6,8 @@ average. +2 means unusually high, -2 unusually low.
 import numpy as np
 import pandas as pd
 
+import price
+
 
 def zscore(s, P):
     s = s.dropna().tail(P["SPREAD_WINDOW"])
@@ -17,7 +19,7 @@ def zscore(s, P):
 def _row(name, kind, series, P):
     s = series.dropna()
     return {"Spread": name, "Type": kind, "Value": s.iloc[-1] if len(s) else np.nan,
-            "Z": zscore(series, P), "Days": len(s.tail(P["SPREAD_WINDOW"]))}
+            "Z": zscore(series, P), "Hurst": price.hurst(series, P), "Days": len(s.tail(P["SPREAD_WINDOW"]))}
 
 
 def read(code, contracts, P):
@@ -34,6 +36,12 @@ def read(code, contracts, P):
         "Carry %/yr": (last[1] / last[0] - 1) * 12 / months * 100,
         "spreads": [],
     }
+    if len(contracts) >= 3:
+        # relative basis: how much steeper the curve is between months 1-2 than between months 2-3
+        # (both as % a year). Positive = the front of the curve is the more backwardated part
+        near = (last[0] / last[1] - 1) * 12 / months
+        far = (last[1] / last[2] - 1) * 12 / (contracts[2][1] - contracts[1][1])
+        out["Rel basis"] = (near - far) * 100
     liquid = [df["Volume"].tail(20).mean() >= P["MIN_LEG_VOLUME"] for _, _, df in contracts]
     # spreads as a % of price, so they stay comparable when the price level changes
     cal = (closes[labels[0]] / closes[labels[1]] - 1) * 100
