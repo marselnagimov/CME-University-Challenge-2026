@@ -34,10 +34,10 @@ Place the orders by hand in CQG, set a stop order at the level shown, then recor
 
 After each trade in CQG, record it:
 
-    python positions.py add ES long 10 7776.50          # opened, or added to, a position
-    python positions.py add CL short 5 91.26 "Dec 26"   # contract month is optional
-    python positions.py close ES 7801.25                # closed all of it at this price
-    python positions.py close ES 7801.25 4              # closed 4 contracts
+    python positions.py add EPZ26 long 10 7776.50       # opened, or added to, a position (CQG symbol)
+    python positions.py add CLEZ26 short 5 91.26
+    python positions.py close EPZ26 7801.25             # closed all of it at this price
+    python positions.py close EPZ26 7801.25 4           # closed 4 contracts
     python positions.py list                            # show open positions
 
 - `positions.csv`: what is open now
@@ -72,6 +72,7 @@ After each trade in CQG, record it:
 - `curve.py`: carry, calendar spreads, butterflies, cross-market spreads
 - `positioning.py`: speculator positioning and open interest from the CFTC's weekly report
 - `events.py`: scheduled releases shown as warnings
+- `symbols.py`: converts market codes to CQG symbols
 - `signals.py`: collects every signal and ranks markets by agreement
 - `positions.py`: records open positions and closed trades, and checks exits
 - `sizing.py`: builds the target portfolio and the order sheet

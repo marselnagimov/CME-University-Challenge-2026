@@ -2,11 +2,13 @@
 
 You place every trade yourself in CQG, then record it here:
 
-    python positions.py add ES long 10 7776.50          # opened or added to a position
-    python positions.py add CL short 5 91.26 "Dec 26"   # optional contract month
-    python positions.py close ES 7801.25                # closed all of it at this price
-    python positions.py close ES 7801.25 4              # closed 4 contracts
+    python positions.py add EPZ26 long 10 7776.50       # opened or added to a position (CQG contract symbol)
+    python positions.py add CLEZ26 short 5 91.26
+    python positions.py close EPZ26 7801.25             # closed all of it at this price
+    python positions.py close EPZ26 7801.25 4           # closed 4 contracts
     python positions.py list
+
+A CQG root without a month (EP) or the plain market code (ES) also works.
 
 Open positions live in positions.csv, every execution goes to trades.csv (used for the
 daily 10-contract check and commissions), and closed trades with their P&L go to journal.csv.
@@ -167,17 +169,27 @@ def evaluate(table, ranked, bars, markets, P):
 
 
 if __name__ == "__main__":
+    import data
+    import symbols
     a = sys.argv[1:]
+    markets = data.load_markets()
+
+    def market(symbol):
+        code, label = symbols.resolve(symbol, markets)
+        if code is None:
+            sys.exit(f"{symbol} is not a symbol I know. Use a CQG symbol such as EPZ26, or a code from config.yaml")
+        return code, label
+
     if not a or a[0] == "list":
         p = load()
+        if len(p):
+            p.insert(0, "cqg", [symbols.contract(c, markets, lab) for c, lab in zip(p["market"], p["contract"])])
         print(p.to_string(index=False) if len(p) else "No open positions.")
     elif a[0] == "add" and len(a) >= 5:
-        add(a[1].upper(), a[2], int(a[3]), float(a[4]), a[5] if len(a) > 5 else "")
+        code, label = market(a[1])
+        add(code, a[2], int(a[3]), float(a[4]), a[5] if len(a) > 5 else label)
     elif a[0] == "close" and len(a) >= 3:
-        import data
-        m = data.load_markets()
-        if a[1].upper() not in m:
-            sys.exit(f"{a[1]} is not in config.yaml")
-        close(a[1].upper(), float(a[2]), int(a[3]) if len(a) > 3 else None, m[a[1].upper()]["point_value"])
+        code, _ = market(a[1])
+        close(code, float(a[2]), int(a[3]) if len(a) > 3 else None, markets[code]["point_value"])
     else:
         print(__doc__)

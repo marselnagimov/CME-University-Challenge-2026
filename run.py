@@ -7,7 +7,7 @@ Run:  python run.py
 # =====================================================================
 
 # --- Data ---
-PRICE_HISTORY = "5y"       # how much daily price history to download
+PRICE_HISTORY = "2y"       # how much daily price history to download
 CONTRACT_HISTORY = "6mo"   # history for each individual contract month
 CACHE_HOURS = 6            # reuse downloads newer than this (0 = always re-download)
 PAUSE_SECONDS = 0.2        # wait between downloads so Yahoo doesn't block you
@@ -47,7 +47,8 @@ SAME_BET_CORR = 0.8        # note when a market moves this closely with a higher
 # --- Extreme one-day moves ---
 SHOCK_VOL_WINDOW = 20      # days used to define a "normal" daily move
 SHOCK_MIN = 2.0            # flag a last-day move (or opening gap) beyond +/- this many normal daily moves
-SHOCK_VOTE = "hurst"         # "off" = flag only, "fade" = vote against the move, "follow" = vote with it
+SHOCK_VOTE = "hurst"       # "off" = flag only, "fade" = vote against the move, "follow" = vote with it,
+                           # "hurst" = follow in trending markets, fade in mean-reverting ones, abstain otherwise
 
 # --- Event calendar (shown as warnings; "ALL" means every market) ---
 EVENT_LOOKAHEAD_DAYS = 5   # show events this many days ahead
@@ -144,6 +145,7 @@ import price
 import report
 import signals
 import sizing
+import symbols
 
 
 def main():
@@ -207,11 +209,12 @@ def main():
     out = report.build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves, spreads, markets, P, data.ROOT / "report.html")
     top = ranked[ranked["Direction"] != 0].head(5)
     print("Top agreement: " + ", ".join(
-        f"{c} {'long' if r['Direction'] > 0 else 'short'} {r['Agree']}/{r['Voting']}" for c, r in top.iterrows()))
+        f"{symbols.root(c, markets)} {'long' if r['Direction'] > 0 else 'short'} {r['Agree']}/{r['Voting']}"
+        for c, r in top.iterrows()))
     print("Order sheet:")
     for _, r in sheet.iterrows():
         o = int(r["Order"])
-        print(f"  {r['Market']:<4} {('BUY ' if o > 0 else 'SELL') + ' ' + str(abs(o)) if o else 'no change':<10}"
+        print(f"  {symbols.front(r['Market'], markets, curves):<8} {('BUY ' if o > 0 else 'SELL') + ' ' + str(abs(o)) if o else 'no change':<10}"
               f" target {int(r['Target']):+d}  ({r['Why']})")
     for when, text, _ in calendar:
         print(f"  Event {when}: {text}")

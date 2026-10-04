@@ -9,6 +9,7 @@ from plotly.subplots import make_subplots
 import events
 import price
 import signals
+import symbols
 
 BLUE, ORANGE, AQUA, RED = "#2a78d6", "#eb6834", "#1baf7a", "#e34948"
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e6e5e0", "#fcfcfb"
@@ -36,16 +37,16 @@ def fmt(col, pattern):
     return col.map(lambda v: DASH if pd.isna(v) else pattern.format(v))
 
 
-def events_html(calendar):
+def events_html(calendar, markets):
     if not calendar:
         return "<p class='note'>No scheduled events in the look-ahead window.</p>"
     items = "".join(f"<li><b>{when}</b>: {text}"
-                    + ("" if not markets else " · affects " + ("every market" if markets == "ALL" else ", ".join(markets)))
-                    + "</li>" for when, text, markets in calendar)
+                    + ("" if not affected else " · affects " + ("every market" if affected == "ALL" else ", ".join(symbols.root(c, markets) for c in affected)))
+                    + "</li>" for when, text, affected in calendar)
     return f"<ul class='events'>{items}</ul>"
 
 
-def orders_html(sheet, plan, book, P, calendar):
+def orders_html(sheet, plan, book, P, calendar, markets, curves):
     """The order sheet: what to buy or sell today to reach the target portfolio."""
     lock = "" if pd.isna(plan["lockout_days"]) else (
         f" The {P['DAILY_LOSS_LOCKOUT_PCT']}% lockout is <b>{plan['lockout_days']:.1f}</b> normal days' loss away.")
@@ -61,12 +62,13 @@ def orders_html(sheet, plan, book, P, calendar):
                  "selling a micro contract.</p>")
     if plan["too_big"]:
         line += (f"<p class='book'>Skipped because one contract exceeds its share of the risk budget: "
-                 f"{', '.join(plan['too_big'])}. A micro contract may fit.</p>")
+                 f"{', '.join(symbols.root(c, markets) for c in plan['too_big'])}. A micro contract may fit.</p>")
     if not len(sheet):
         return line + ("<p class='note'>No market has enough agreement to open a position "
                        f"(needs a score of {P['MIN_SCORE_TO_ENTER']}).</p>")
     o = pd.DataFrame({
-        "Market": sheet["Market"], "Name": sheet["Name"], "Side": sheet["Side"],
+        "CQG symbol": [symbols.front(c, markets, curves) for c in sheet["Market"]],
+        "Name": sheet["Name"], "Side": sheet["Side"],
         "Order": ["<b>" + ("Buy " if v > 0 else "Sell ") + f"{abs(int(v)):,}</b>" if v else "No change" for v in sheet["Order"]],
         "Held": sheet["Held"].map("{:+,d}".format), "Target": sheet["Target"].map("{:+,d}".format),
         "Stop": sheet["Stop"].map(lambda v: DASH if pd.isna(v) else num(v)),
@@ -75,15 +77,21 @@ def orders_html(sheet, plan, book, P, calendar):
         "Why": sheet["Why"],
         "Alerts and events": ["; ".join(a + events.for_market(calendar, c))
                               for a, c in zip(sheet["Alerts"], sheet["Market"])]})
+    o["Alerts and events"] = o["Alerts and events"].map(lambda x: symbols.relabel(x, markets))
     return line + "<div class='scroll'>" + o.to_html(index=False, border=0, classes="summary orders", escape=False) + "</div>"
 
 
-def positions_html(held, book, P):
+def positions_html(held, book, P, markets, curves):
     """Open positions with an action for each, plus the portfolio risk line."""
     if not len(held):
         return ("<p class='note'>No open positions recorded. After a trade in CQG, record it with "
-                "<code>python positions.py add ES long 10 7776.50</code></p>")
+                "<code>python positions.py add EPZ26 long 10 7776.50</code></p>")
     h = held.copy()
+    if "Contract" in h:
+        h["Market"] = [symbols.contract(c, markets, lab) if symbols.month_code(lab) else symbols.front(c, markets, curves)
+                       for c, lab in zip(h["Market"], h["Contract"])]
+        h = h.drop(columns="Contract")
+    h = h.rename(columns={"Market": "CQG symbol"})
     for col, pattern in (("Entry", None), ("Last", None), ("Stop", None)):
         h[col] = h[col].map(lambda v: DASH if pd.isna(v) else num(v))
     h["P&L"] = fmt(h["P&L"], "${:+,.0f}")
@@ -99,7 +107,7 @@ def positions_html(held, book, P):
         index=False, border=0, classes="summary held", escape=False) + "</div>"
 
 
-def agreement_html(s):
+def agreement_html(s, markets):
     """The ranked signal table: one row per market, one column per signal."""
     sym = {1: "▲", -1: "▼", 0: "–"}
     names = [n for n in signals.NAMES if n in s.columns]
@@ -112,13 +120,13 @@ def agreement_html(s):
         agree = f"{r['Agree']} of {r['Voting']}" + (f" ({r['Against']} against)" if r["Against"] else "")
         cells = "".join(f"<td class='v'>{'' if pd.isna(r[n]) or r[n] is None else sym[int(r[n])]}</td>"
                         for n in names)
-        body += (f"<tr><td>{i}</td><td>{code}</td><td>{r['Name']}</td><td class='l'><b>{call}</b></td>"
+        body += (f"<tr><td>{i}</td><td>{symbols.root(code, markets)}</td><td>{r['Name']}</td><td class='l'><b>{call}</b></td>"
                  f"<td class='l'>{agree if d else DASH}</td>{cells}<td>{r['Strength']:+.2f}</td>"
-                 f"<td>{r['Contracts']:,.0f}</td><td class='l'>{'; '.join(r['Notes'])}</td></tr>")
+                 f"<td>{r['Contracts']:,.0f}</td><td class='l'>{symbols.relabel('; '.join(r['Notes']), markets)}</td></tr>")
     return f"<table class='summary agree'><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
 
-def overview_html(t, P):
+def overview_html(t, P, markets):
     o = pd.DataFrame(index=t.index)
     o["Name"] = t["Name"]
     o["Close"] = t["Close"].map(num)
@@ -142,7 +150,19 @@ def overview_html(t, P):
     o["Gamma levels"] = [
         " / ".join(num(r * c) for r in sorted(rel)) if isinstance(rel, list) and rel else DASH
         for rel, c in zip(t["Gamma rel"], t["Close"])]
+    o.index = [symbols.root(c, markets) for c in o.index]
+    o.index.name = "Market"
     return o.reset_index().to_html(index=False, border=0, classes="summary")
+
+
+def spread_name(name, kind, markets):
+    """Spread label in CQG symbols. Exchange-traded calendars get their CQG spread symbol."""
+    if kind == "Calendar":
+        code, months = name.split(" ", 1)
+        first = months.split(" – ")[0]
+        sym = symbols.calendar(code, markets, first, reverse=code in ("ES", "6E"))
+        return f"{sym}  ({months}, exchange spread)"
+    return f"{symbols.relabel(name, markets)}  ({kind})"
 
 
 def hbar(values, labels, title, text, hover, diverging=True, suffix=""):
@@ -157,13 +177,13 @@ def hbar(values, labels, title, text, hover, diverging=True, suffix=""):
     return fig
 
 
-def vol_chart(t):
+def vol_chart(t, markets):
     v = t.dropna(subset=["Implied vol"]).copy()
     v["gap"] = v["Implied vol"] - v["Realized vol"]
     v = v.sort_values("gap")
     fig = go.Figure()
     for name, col, color in (("Implied (expected)", "Implied vol", BLUE), ("Realized (actual)", "Realized vol", ORANGE)):
-        fig.add_trace(go.Bar(x=v[col], y=v.index, orientation="h", name=name,
+        fig.add_trace(go.Bar(x=v[col], y=[symbols.root(c, markets) for c in v.index], orientation="h", name=name,
                              marker=dict(color=color, cornerradius=3),
                              hovertemplate="%{y} " + name.lower() + ": %{x:.1f}%<extra></extra>"))
     style(fig, 120 + 34 * len(v), "Expected vs actual volatility")
@@ -176,12 +196,12 @@ def grid(n, cols):
     return -(-n // cols), cols
 
 
-def gamma_chart(gamma, t):
+def gamma_chart(gamma, t, markets):
     codes = [c for c in gamma if len(gamma[c]) and gamma[c]["gex"].max() > 0]
     if not codes:
         return None
     rows, cols = grid(len(codes), 4)
-    fig = make_subplots(rows=rows, cols=cols, subplot_titles=codes,
+    fig = make_subplots(rows=rows, cols=cols, subplot_titles=[symbols.root(c, markets) for c in codes],
                         vertical_spacing=min(0.12, 0.5 / rows), horizontal_spacing=0.05)
     for i, code in enumerate(codes):
         g, close = gamma[code], t.loc[code, "Close"]
@@ -196,12 +216,12 @@ def gamma_chart(gamma, t):
     return fig
 
 
-def curve_chart(curves):
+def curve_chart(curves, markets):
     codes = list(curves)
     if not codes:
         return None
     rows, cols = grid(len(codes), 4)
-    fig = make_subplots(rows=rows, cols=cols, subplot_titles=codes,
+    fig = make_subplots(rows=rows, cols=cols, subplot_titles=[symbols.root(c, markets) for c in codes],
                         vertical_spacing=min(0.12, 0.5 / rows), horizontal_spacing=0.06)
     for i, code in enumerate(codes):
         labels, prices = zip(*curves[code])
@@ -219,7 +239,7 @@ def price_chart(bars, markets, P):
     codes = list(bars)
     rows, cols = grid(len(codes), 4)
     fig = make_subplots(rows=rows, cols=cols, vertical_spacing=min(0.1, 0.4 / rows), horizontal_spacing=0.05,
-                        subplot_titles=[f"{c} · {markets[c]['name']}" for c in codes])
+                        subplot_titles=[f"{symbols.root(c, markets)} · {markets[c]['name']}" for c in codes])
     series = [("Price", None, BLUE, 2), (f"{P['FAST_MA']}-day average", P["FAST_MA"], ORANGE, 1.3),
               (f"{P['SLOW_MA']}-day average", P["SLOW_MA"], AQUA, 1.3)]
     for i, code in enumerate(codes):
@@ -236,10 +256,11 @@ def price_chart(bars, markets, P):
     return fig
 
 
-def corr_chart(bars, P):
+def corr_chart(bars, P, markets):
     corr = pd.DataFrame({c: df["Close"].pct_change() for c, df in bars.items()}).tail(P["CORR_WINDOW"]).corr()
+    names = [symbols.root(c, markets) for c in corr.columns]
     fig = go.Figure(go.Heatmap(
-        z=corr.values, x=corr.columns, y=corr.index, zmin=-1, zmax=1,
+        z=corr.values, x=names, y=names, zmin=-1, zmax=1,
         colorscale=[[0, RED], [0.5, "#ecebe7"], [1, BLUE]], xgap=1, ygap=1,
         hovertemplate="%{y} vs %{x}: %{z:.2f}<extra></extra>", colorbar=dict(title="Correlation", thickness=12)))
     style(fig, 760, f"Which markets move together ({P['CORR_WINDOW']}-day correlation of daily moves)")
@@ -277,7 +298,7 @@ def build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves,
             t[col] = np.nan
     d = int(P["SKEW_DELTA"] * 100)
     parts = [(
-        "<h2>Today's order sheet</h2>" + orders_html(sheet, plan, book, P, calendar),
+        "<h2>Today's order sheet</h2>" + orders_html(sheet, plan, book, P, calendar, markets, curves),
         f"Positions you hold are kept unless the exit check says close. Empty slots (up to {P['MAX_POSITIONS']}) are "
         f"filled from the top of the signal ranking, needing a score of {P['MIN_SCORE_TO_ENTER']} and skipping "
         "anything that is the same bet as a position already chosen. Every position gets equal risk, scaled so the "
@@ -285,16 +306,16 @@ def build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves,
         "and recent-weighted volatility. Margin marked (est.) is a guess: check CQG before placing the order. "
         "A held position is only added to when it is in profit and agreement is still strong. "
         "Held and Target are signed: + is long, − is short."), (
-        "<h2>Upcoming events</h2>" + events_html(calendar),
+        "<h2>Upcoming events</h2>" + events_html(calendar, markets),
         f"Scheduled releases in the next {P['EVENT_LOOKAHEAD_DAYS']} days. Prices can jump on these, and a stop will "
         "not protect you from a gap, so consider holding less into an event that affects a position."), (
-        "<h2>Open positions</h2>" + positions_html(held, book, P),
+        "<h2>Open positions</h2>" + positions_html(held, book, P, markets, curves),
         f"CLOSE appears when the trailing stop is hit ({P['STOP_DAILY_MOVES']} normal daily moves back from the best "
         "close since entry), when the signals flip, or when they stop agreeing. Prices are the front-month "
         "close, so a position in a later month is approximate. Balance is the starting balance plus recorded "
         "results; CQG is the true figure. The script only advises: every order is yours to place."), (
         "<h2>Signal agreement: where the signals point the same way</h2><div class='scroll'>"
-        + agreement_html(ranked) + "</div>",
+        + agreement_html(ranked, markets) + "</div>",
         "Each signal votes ▲ long, ▼ short or – neutral. A blank cell means the signal has no data or does not "
         "apply to that kind of market. Markets are ranked by votes for the call minus votes against it. "
         f"<b>Trend</b>: the {P['TREND_WINDOW']}-day move for markets more volatile than {P['TREND_SPEED_VOL']}% a year, "
@@ -318,7 +339,7 @@ def build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves,
         "Notes flag any market whose last day or opening gap was that extreme. "
         f"Contracts is how many give a normal daily swing of {P['DAILY_RISK_PCT']}% of your balance in that market "
         "alone, before any margin check. Positioning data is weekly and three days old when published."), (
-        "<h2>Every market at a glance</h2><div class='scroll'>" + overview_html(t, P) + "</div>",
+        "<h2>Every market at a glance</h2><div class='scroll'>" + overview_html(t, P, markets) + "</div>",
         f"Trend strength is the {P['TREND_WINDOW']}-day move divided by a normal {P['TREND_WINDOW']}-day move "
         "(2.0 = twice the usual distance; the sign is the direction). Last day is the most recent day's move in "
         f"normal daily moves, marked ! beyond {P['SHOCK_MIN']}. Hurst above 0.5 means moves have tended "
@@ -332,23 +353,23 @@ def build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves,
         f"A dash means no data, or data too thin to trust.")]
 
     if t["Implied vol"].notna().any():
-        parts.append((vol_chart(t),
+        parts.append((vol_chart(t, markets),
                       "Blue longer than orange: the options market expects bigger moves than the market has been "
                       "making, often because an event is coming. Orange longer: options are pricing calm after a "
                       "rough patch."))
         s = t["Skew"].dropna().sort_values()
         if len(s):
-            parts.append((hbar(s.values, s.index, f"Skew: {d}-delta put vol minus {d}-delta call vol",
+            parts.append((hbar(s.values, [symbols.root(c, markets) for c in s.index], f"Skew: {d}-delta put vol minus {d}-delta call vol",
                                [f"{v:+.1f}" for v in s], "%{y}: %{x:+.2f} vol points"),
                           "Right of zero: traders are paying up for downside protection. Left of zero: they are "
                           "paying up for upside. This is the price of a risk reversal."))
-        g = gamma_chart(gamma, t)
+        g = gamma_chart(gamma, t, markets)
         if g:
             parts.append((g, "Tall bars are prices where the most option gamma sits. Price often stalls near them "
                              "and can speed up once it breaks through. Levels come from the ETF's options, "
                              "rescaled to the futures price."))
 
-    c = curve_chart(curves)
+    c = curve_chart(curves, markets)
     if c:
         parts.append((c, "Sloping up (contango): later months cost more. Sloping down (backwardation): the market "
                          "is paying a premium for delivery now, usually a sign of tight supply. For stock index, "
@@ -357,12 +378,13 @@ def build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves,
         s = spreads.dropna(subset=["Z"])
         s = s.reindex(s["Z"].abs().sort_values(ascending=False).index).head(P["SPREADS_SHOWN"]).iloc[::-1]
         if len(s):
-            parts.append((hbar(s["Z"].values, s["Spread"] + "  (" + s["Type"] + ")",
+            parts.append((hbar(s["Z"].values, [spread_name(n, k, markets) for n, k in zip(s["Spread"], s["Type"])],
                                f"Most stretched spreads (z-score against the last {P['SPREAD_WINDOW']} days)",
                                [f"{z:+.1f}  ·  H {h:.2f}" if not np.isnan(h) else f"{z:+.1f}"
                                 for z, h in zip(s["Z"], s["Hurst"])], "%{y}: %{x:+.2f}"),
                           "Each bar is a spread's distance from its own recent average, in normal deviations. "
-                          "Beyond +2 or -2 is unusual. H is the spread's Hurst exponent: well below 0.5 it has tended to snap "
+                          "Beyond +2 or -2 is unusual. Exchange spreads show the CQG spread symbol: S1 buys the first month and sells "
+                          "the next, W1 does the reverse. H is the spread's Hurst exponent: well below 0.5 it has tended to snap "
                           "back, which is what a mean-reversion trade needs. Plain 'Calendar' spreads can be traded as one order in the "
                           "challenge; anything marked 'legged', plus ratios and packages, must be entered leg by "
                           "leg and is charged full margin on each leg."))
@@ -370,7 +392,7 @@ def build(calendar, sheet, plan, held, book, ranked, table, bars, gamma, curves,
     parts.append((price_chart(bars, markets, P),
                   "Price above both averages, with the fast one above the slow one, is an uptrend. "
                   "The reverse is a downtrend. Lines tangled together mean no clear trend."))
-    parts.append((corr_chart(bars, P),
+    parts.append((corr_chart(bars, P, markets),
                   "Blue: the two markets rise and fall together, so holding both the same way is one bet made twice. "
                   "Red: they move opposite. Pale: unrelated."))
 
